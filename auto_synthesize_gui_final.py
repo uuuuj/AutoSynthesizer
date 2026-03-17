@@ -1398,6 +1398,17 @@ class SynthesizeApp:
 
         self.original_columns = list(self.df.columns)
 
+        # ── 500행 초과 시 잘라내기 ──
+        MAX_ROWS = 500
+        if len(self.df) > MAX_ROWS:
+            original_rows = len(self.df)
+            self.df = self.df.iloc[:MAX_ROWS].reset_index(drop=True)
+            self.info['rows'] = len(self.df)
+            messagebox.showinfo(
+                "행 수 제한 안내",
+                f"원본 데이터가 {original_rows}행으로 제한({MAX_ROWS}행)을 초과합니다.\n\n"
+                f"상위 {MAX_ROWS}행만 사용하고 나머지 {original_rows - MAX_ROWS}행은 제외됩니다.")
+
         self.col_types = {}
         type_counts = {'numerical': 0, 'datetime': 0, 'categorical': 0}
         for col in self.df.columns:
