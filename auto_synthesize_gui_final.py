@@ -822,7 +822,7 @@ class SynthesizeApp:
                                   command=self._run, style="Run.TButton",
                                   state='disabled')
         self.run_btn.pack(side=tk.LEFT)
-        self.progress = ttk.Progressbar(bf, mode='indeterminate', length=200)
+        self.progress = ttk.Progressbar(bf, mode='determinate', maximum=100, length=200)
         self.progress.pack(side=tk.LEFT, padx=(12, 0))
         self.status_lbl = ttk.Label(bf, text="", style="Sub.TLabel")
         self.status_lbl.pack(side=tk.LEFT, padx=(12, 0))
@@ -1716,7 +1716,7 @@ class SynthesizeApp:
             messagebox.showwarning("경고", "저장 파일명을 입력해 주세요.")
             return
         self.run_btn.config(state='disabled')
-        self.progress.start(10)
+        self.progress['value'] = 0
         self.status_lbl.config(text="합성 중...")
         self.log_text.config(state=tk.NORMAL)
         self.log_text.delete("1.0", tk.END)
@@ -1731,18 +1731,19 @@ class SynthesizeApp:
             self.root.after(0, lambda: messagebox.showerror("오류", str(e)))
         finally:
             self.root.after(0, lambda: self.run_btn.config(state='normal'))
-            self.root.after(0, lambda: self.progress.stop())
+            self.root.after(0, lambda: self.progress.configure(value=100))
 
     def _do_synth(self):
         L = lambda m: self.root.after(0, lambda msg=m: self._log(msg))
         S = lambda m: self.root.after(0, lambda msg=m: self.status_lbl.config(text=msg))
+        P = lambda v: self.root.after(0, lambda val=v: self.progress.configure(value=val))
 
         df, ct = self.df, self.col_types
 
         L("=" * 55); L("  합성 데이터 생성 시작"); L("=" * 55)
 
         # 1. 매핑 수집
-        S("[1/8] 매핑 수집..."); L("\n[1/8] 매핑 수집...")
+        P(0); S("[1/8] 매핑 수집..."); L("\n[1/8] 매핑 수집...")
         mapping_dict = self._collect_mappings()
         for col, mp in mapping_dict.items():
             L(f"  📋 {col}: {len(mp)}개 매핑")
@@ -1751,12 +1752,12 @@ class SynthesizeApp:
                 L(f"     {o[:15]} → {f[:15]}")
 
         # 2. 문자열 합성 (null 보존)
-        S("[2/8] 문자열 합성..."); L("\n[2/8] 문자열 합성...")
+        P(12); S("[2/8] 문자열 합성..."); L("\n[2/8] 문자열 합성...")
         df_text, desc_map = synthesize_text_columns(df, ct, mapping_dict)
         L(f"  완료: {len(desc_map)}개 컬럼")
 
         # 3. 함수 종속성 감지 [Issue 3]
-        S("[3/8] 종속성 분석..."); L("\n[3/8] 컬럼 간 함수 종속성 분석...")
+        P(25); S("[3/8] 종속성 분석..."); L("\n[3/8] 컬럼 간 함수 종속성 분석...")
         func_deps = detect_functional_dependencies(df, ct)
         if func_deps:
             for dep in func_deps:
@@ -1765,7 +1766,7 @@ class SynthesizeApp:
             L("  종속 관계 없음")
 
         # 4. 상관관계
-        S("[4/8] 상관관계..."); L("\n[4/8] 상관관계 분석...")
+        P(37); S("[4/8] 상관관계..."); L("\n[4/8] 상관관계 분석...")
         cr = analyze_correlations(df, ct)
         if cr.get('strong_pairs'):
             for p in cr['strong_pairs']:
@@ -1774,7 +1775,7 @@ class SynthesizeApp:
             L("  강한 상관관계 없음")
 
         # 5. 제약
-        S("[5/8] 제약조건..."); L("\n[5/8] 제약 조건...")
+        P(50); S("[5/8] 제약조건..."); L("\n[5/8] 제약 조건...")
         cons = auto_detect_constraints(df, ct)
         for c in cons:
             if c['type'] == 'positive':      L(f"  [양수]  {c['column']}")
@@ -1784,7 +1785,7 @@ class SynthesizeApp:
             L("  없음")
 
         # 6. 수치/날짜 (null 비율 유지)
-        S("[6/8] 수치 합성..."); L("\n[6/8] Gaussian Copula 합성...")
+        P(62); S("[6/8] 수치 합성..."); L("\n[6/8] Gaussian Copula 합성...")
         nr_str = self.num_rows_var.get().strip()
         nr = int(nr_str) if nr_str.isdigit() else None
         syn_num = generate_numeric_datetime(df, ct, cons, nr)
@@ -1792,7 +1793,7 @@ class SynthesizeApp:
         L(f"  {n}행 생성")
 
         # ── [Issue 8] 가중 샘플링: 원본 분포 비율 보존 ──
-        S("[7/8] 행 조합..."); L("\n[7/8] 행 조합 (분포 보존)...")
+        P(75); S("[7/8] 행 조합..."); L("\n[7/8] 행 조합 (분포 보존)...")
 
         # 행별 가중치 계산 — 범주형 컬럼의 빈도 기반
         cat_cols = [c for c, t in ct.items() if t == 'categorical' and c in df_text.columns]
@@ -1877,7 +1878,7 @@ class SynthesizeApp:
             L(f"  🆔 {col}: {len(final)}개 고유 ID 재생성 ({prefix}00001~)")
 
         # 8. 품질
-        S("[8/8] 품질 검증..."); L("\n[8/8] 품질 검증...")
+        P(88); S("[8/8] 품질 검증..."); L("\n[8/8] 품질 검증...")
         ov, cs = validate_quality(df, final, ct)
         for c, sc in cs.items():
             bar = '█' * int(sc * 20) + '░' * (20 - int(sc * 20))
@@ -1898,7 +1899,7 @@ class SynthesizeApp:
                     L(f"  ⚠️ {col}: 정리 실패 ({e})")
 
         # 저장
-        S("저장 중..."); L("\n" + "─" * 55 + "\n  파일 저장...")
+        P(95); S("저장 중..."); L("\n" + "─" * 55 + "\n  파일 저장...")
         bp = os.path.join(self.save_dir.get().strip(), self.save_name.get().strip())
 
         out_xl = bp + '.xlsx'
@@ -1966,6 +1967,7 @@ class SynthesizeApp:
             final.to_csv(out_csv, index=False, encoding='utf-8-sig')
             L(f"  ✅ CSV         : {out_csv}")
 
+        P(100)
         L("\n" + "=" * 55)
         L(f"  🎉 완료!  {len(final)}행  |  품질 {ov:.1%}")
         L("=" * 55)
