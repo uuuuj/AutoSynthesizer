@@ -758,7 +758,6 @@ class SynthesizeApp:
         style.configure("ColHeader.TLabel", font=("맑은 고딕", 10, "bold"), foreground="#333")
         style.configure("Run.TButton", font=("맑은 고딕", 11, "bold"))
         style.configure("Auto.TButton", font=("맑은 고딕", 9))
-        style.configure("Restore.TButton", font=("맑은 고딕", 10, "bold"))
 
         # ── 로고 배너 ──
         self._logo_image = None  # 참조 유지 (GC 방지)
@@ -947,11 +946,6 @@ class SynthesizeApp:
 
         self.main_canvas.bind("<Enter>", _bind_mousewheel)
         self.main_canvas.bind("<Leave>", _unbind_mousewheel)
-
-        # ═══ 탭2: 원래 데이터로 복원 ═══
-        tab_restore = ttk.Frame(self.notebook, padding=10)
-        self.notebook.add(tab_restore, text="  🔄 원래 데이터로 복원  ")
-        self._build_restore_tab(tab_restore)
 
     # ══════════════════════════════════════════════════════════
     # Refresh (새 파일) / 데이터 확정
@@ -1184,160 +1178,7 @@ class SynthesizeApp:
         self._blink_id = self.root.after(650, self._do_blink)
 
     # ══════════════════════════════════════════════════════════
-    # 탭2: 원래 데이터로 복원 UI
-    # ══════════════════════════════════════════════════════════
-
-    def _build_restore_tab(self, parent):
-        desc = ttk.Label(parent,
-                         text="합성 데이터 파일과 변환키(.json) 파일을 첨부하면\n"
-                              "가짜값 → 원본값, 변경된 컬럼명 → 원본 컬럼명으로 복원합니다.",
-                         font=("맑은 고딕", 10), foreground="#333", justify=tk.LEFT)
-        desc.pack(anchor='w', pady=(0, 12))
-
-        # 합성 데이터 파일
-        self.restore_data_path = tk.StringVar()
-        f1 = ttk.LabelFrame(parent, text="  합성 데이터 파일 (.xlsx)  ", padding=8)
-        f1.pack(fill=tk.X, pady=(0, 8))
-        r1 = ttk.Frame(f1); r1.pack(fill=tk.X)
-        ttk.Entry(r1, textvariable=self.restore_data_path, font=("Consolas", 9)).pack(
-            side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
-        ttk.Button(r1, text="찾아보기...", command=self._browse_restore_data).pack(side=tk.LEFT)
-
-        # 변환키 파일
-        self.restore_key_path = tk.StringVar()
-        f2 = ttk.LabelFrame(parent, text="  변환키 파일 (_변환키.json)  ", padding=8)
-        f2.pack(fill=tk.X, pady=(0, 8))
-        r2 = ttk.Frame(f2); r2.pack(fill=tk.X)
-        ttk.Entry(r2, textvariable=self.restore_key_path, font=("Consolas", 9)).pack(
-            side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
-        ttk.Button(r2, text="찾아보기...", command=self._browse_restore_key).pack(side=tk.LEFT)
-
-        # 저장 경로
-        self.restore_save_path = tk.StringVar()
-        f3 = ttk.LabelFrame(parent, text="  복원 파일 저장 경로  ", padding=8)
-        f3.pack(fill=tk.X, pady=(0, 12))
-        r3 = ttk.Frame(f3); r3.pack(fill=tk.X)
-        ttk.Entry(r3, textvariable=self.restore_save_path, font=("Consolas", 9)).pack(
-            side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
-        ttk.Button(r3, text="폴더 선택...", command=self._browse_restore_save).pack(side=tk.LEFT)
-
-        # 실행 버튼
-        self.restore_btn = ttk.Button(parent, text="🔄  원래 데이터로 복원 실행",
-                                       command=self._run_restore, style="Restore.TButton")
-        self.restore_btn.pack(pady=(5, 8))
-
-        # 로그
-        self.restore_log = scrolledtext.ScrolledText(parent, height=15, font=("Consolas", 9),
-                                                      state=tk.DISABLED, wrap=tk.WORD)
-        self.restore_log.pack(fill=tk.BOTH, expand=True)
-
-    def _browse_restore_data(self):
-        p = filedialog.askopenfilename(title="합성 데이터 파일 선택",
-            filetypes=[("Excel", "*.xlsx"), ("All", "*.*")])
-        if p:
-            self.restore_data_path.set(p)
-            if not self.restore_save_path.get():
-                self.restore_save_path.set(os.path.dirname(p))
-
-    def _browse_restore_key(self):
-        p = filedialog.askopenfilename(title="변환키 파일 선택",
-            filetypes=[("JSON", "*.json"), ("All", "*.*")])
-        if p:
-            self.restore_key_path.set(p)
-
-    def _browse_restore_save(self):
-        d = filedialog.askdirectory(title="복원 파일 저장 폴더 선택")
-        if d:
-            self.restore_save_path.set(d)
-
-    def _restore_log_msg(self, msg):
-        self.restore_log.config(state=tk.NORMAL)
-        self.restore_log.insert(tk.END, msg + "\n")
-        self.restore_log.see(tk.END)
-        self.restore_log.config(state=tk.DISABLED)
-        self.root.update_idletasks()
-
-    def _run_restore(self):
-        data_path = self.restore_data_path.get().strip()
-        key_path  = self.restore_key_path.get().strip()
-        save_dir  = self.restore_save_path.get().strip()
-
-        if not data_path:
-            messagebox.showwarning("경고", "합성 데이터 파일을 선택해 주세요."); return
-        if not key_path:
-            messagebox.showwarning("경고", "변환키 파일을 선택해 주세요."); return
-        if not save_dir:
-            messagebox.showwarning("경고", "저장 경로를 선택해 주세요."); return
-
-        self.restore_log.config(state=tk.NORMAL)
-        self.restore_log.delete("1.0", tk.END)
-        self.restore_log.config(state=tk.DISABLED)
-
-        L = self._restore_log_msg
-
-        try:
-            L("=" * 55)
-            L("  원래 데이터로 복원 시작")
-            L("=" * 55)
-
-            # 키 파일 로드
-            L("\n[1/3] 변환키 파일 로드...")
-            with open(key_path, 'r', encoding='utf-8') as f:
-                key_data = json.load(f)
-
-            col_rename_map     = key_data.get('column_rename', {})      # {원본→변경}
-            value_mapping      = key_data.get('value_mapping', {})       # {컬럼: {원본→가짜}}
-            L(f"  컬럼명 변경: {len(col_rename_map)}개")
-            L(f"  값 매핑 컬럼: {len(value_mapping)}개")
-
-            # 합성 데이터 로드
-            L("\n[2/3] 합성 데이터 로드...")
-            df = pd.read_excel(data_path)
-            L(f"  {len(df)}행 × {len(df.columns)}열 로드 완료")
-
-            # 역변환: 컬럼명 복원 (변경된이름 → 원본이름)
-            if col_rename_map:
-                reverse_col = {v: k for k, v in col_rename_map.items()}
-                df.rename(columns=reverse_col, inplace=True)
-                L(f"\n  컬럼명 복원:")
-                for changed, orig in reverse_col.items():
-                    if changed != orig:
-                        L(f"    {changed} → {orig}")
-
-            # 역변환: 값 매핑 복원 (가짜→원본)
-            if value_mapping:
-                L(f"\n  값 매핑 복원:")
-                for col, mapping in value_mapping.items():
-                    if col not in df.columns:
-                        # 컬럼명이 이미 복원되었을 수 있으므로 변환키의 원본 컬럼명 확인
-                        L(f"    ⚠️ 컬럼 '{col}'을 찾을 수 없음 (건너뜀)")
-                        continue
-                    reverse_map = {v: k for k, v in mapping.items()}
-                    null_mask = df[col].isna()
-                    df[col] = df[col].astype(str).map(reverse_map).where(
-                        df[col].astype(str).map(reverse_map).notna(), df[col])
-                    df[col] = df[col].where(~null_mask, other=np.nan)
-                    L(f"    {col}: {len(reverse_map)}개 값 복원")
-
-            # 저장
-            L("\n[3/3] 복원 파일 저장...")
-            base_name = os.path.splitext(os.path.basename(data_path))[0]
-            out_path = os.path.join(save_dir, f"{base_name}_복원.xlsx")
-            df.to_excel(out_path, index=False)
-            L(f"  ✅ 저장 완료: {out_path}")
-
-            L("\n" + "=" * 55)
-            L(f"  🎉 복원 완료!  {len(df)}행 × {len(df.columns)}열")
-            L("=" * 55)
-
-            messagebox.showinfo("완료", f"원래 데이터 복원 완료!\n\n저장: {out_path}")
-
-        except Exception as e:
-            L(f"\n❌ 오류: {e}")
-            messagebox.showerror("오류", str(e))
-
-    # ══════════════════════════════════════════════════════════
-    # 이벤트 (탭1)
+    # 이벤트
     # ══════════════════════════════════════════════════════════
 
     def _browse_file(self):
