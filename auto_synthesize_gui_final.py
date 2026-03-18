@@ -110,7 +110,7 @@ def generate_fake_companies(n, seed=42):
 
 def generate_auto_codes(col_name, n, seed=42):
     """컬럼명 기반 자동 코드 생성"""
-    cs = str(col_name)[:4]
+    cs = str(col_name)
     alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     return [f'{cs}_{alpha[i] if i<26 else str(i)}' for i in range(n)]
 
@@ -1567,7 +1567,7 @@ class SynthesizeApp:
         for i, (val, entry, fixed) in enumerate(entries):
             if entry is not None and not entry.get().strip():
                 entry.delete(0, tk.END)
-                entry.insert(0, pool[i] if i < len(pool) else f"{str(display_col)[:4]}_{i}")
+                entry.insert(0, pool[i] if i < len(pool) else f"{str(display_col)}_{i}")
 
     def _auto_fill_all(self):
         for col in self.col_entry_map:
@@ -1589,7 +1589,7 @@ class SynthesizeApp:
                         idx = len(mapping)
                         alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
                         display_col = self._get_renamed_col(col)
-                        fake = f"{str(display_col)[:4]}_{alpha[idx] if idx < 26 else str(idx)}"
+                        fake = f"{str(display_col)}_{alpha[idx] if idx < 26 else str(idx)}"
                     mapping[val] = fake
             if mapping:
                 mapping_dict[col] = mapping
