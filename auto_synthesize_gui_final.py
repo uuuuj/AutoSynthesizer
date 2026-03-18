@@ -1711,7 +1711,36 @@ class SynthesizeApp:
         self.log_text.config(state=tk.NORMAL)
         self.log_text.delete("1.0", tk.END)
         self.log_text.config(state=tk.DISABLED)
+        self._set_ui_locked(True)
         threading.Thread(target=self._worker, daemon=True).start()
+
+    def _set_ui_locked(self, locked):
+        """작업 진행 중 모든 버튼/입력을 비활성화하거나 복원한다.
+
+        Args:
+            locked (bool): True면 비활성화, False면 복원
+        """
+        state = 'disabled' if locked else 'normal'
+        # 노트북 전체에 오버레이 대신, 개별 위젯 비활성화
+        for widget in self.root.winfo_children():
+            self._set_children_state(widget, state)
+        # 로그 텍스트는 항상 disabled (읽기 전용)
+        self.log_text.config(state=tk.DISABLED)
+
+    def _set_children_state(self, widget, state):
+        """재귀적으로 자식 위젯의 state를 변경한다.
+
+        Args:
+            widget: 대상 위젯
+            state (str): 'disabled' 또는 'normal'
+        """
+        try:
+            if isinstance(widget, (ttk.Button, ttk.Entry, ttk.Combobox, tk.Button)):
+                widget.config(state=state)
+        except Exception:
+            pass
+        for child in widget.winfo_children():
+            self._set_children_state(child, state)
 
     def _worker(self):
         try:
@@ -1720,8 +1749,11 @@ class SynthesizeApp:
             self.root.after(0, lambda: self._log(f"\n❌ 오류: {e}"))
             self.root.after(0, lambda: messagebox.showerror("오류", str(e)))
         finally:
-            self.root.after(0, lambda: self.run_btn.config(state='normal'))
+            self.root.after(0, lambda: self._set_ui_locked(False))
             self.root.after(0, lambda: self.progress.configure(value=100))
+            # 완료 후 실행 버튼은 비활성 유지 (재실행 방지)
+            self.root.after(0, lambda: self.run_btn.config(state='disabled'))
+            self.root.after(0, lambda: self.confirm_btn.config(state='disabled'))
 
     def _do_synth(self):
         L = lambda m: self.root.after(0, lambda msg=m: self._log(msg))
