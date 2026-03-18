@@ -434,6 +434,43 @@ def _is_id_col(series):
     return series.dropna().astype(str).str.match(
         r'^[A-Za-z가-힣]{1,3}[\-_]?\d{3,}$').mean() > 0.7
 
+
+def _extract_id_prefix(values: list) -> str:
+    """
+    ID 값 리스트에서 공통 접두사(영문/한글)를 추출.
+
+    Args:
+        values (list): ID 문자열 리스트
+
+    Returns:
+        str: 추출된 접두사 (없으면 빈 문자열)
+    """
+    if not values:
+        return ''
+    m = re.match(r'^([A-Za-z가-힣]+)', str(values[0]))
+    return m.group(1) if m else ''
+
+
+_ID_PREFIX_CANDIDATES = ['X', 'F', 'Z', 'Q', 'W', 'J', 'V', 'P', 'R', 'T']
+
+
+def _pick_different_prefix(orig_prefix: str) -> str:
+    """
+    원본 접두사와 겹치지 않는 가짜 접두사를 선택.
+
+    Args:
+        orig_prefix (str): 원본 ID의 접두사
+
+    Returns:
+        str: 원본과 다른 가짜 접두사
+    """
+    upper = orig_prefix.upper()
+    for candidate in _ID_PREFIX_CANDIDATES:
+        if candidate != upper:
+            return candidate
+    return 'FID'
+
+
 # ══════════════════════════════════════════════════════════════
 # 문자열 합성 (매핑 기반) — null 보존
 # ══════════════════════════════════════════════════════════════
@@ -1472,13 +1509,16 @@ class SynthesizeApp:
             entries = []
 
             if is_id:
+                # 원본 접두사 감지 후 겹치지 않는 접두사 선택
+                orig_prefix = _extract_id_prefix(unique_vals)
+                fake_prefix = _pick_different_prefix(orig_prefix)
                 for i, val in enumerate(unique_vals):
                     row = ttk.Frame(self.input_inner)
                     row.pack(fill=tk.X, padx=(20, 0), pady=1)
                     ttk.Label(row, text=f"{val}", width=25, anchor='w',
                               font=("Consolas", 9)).pack(side=tk.LEFT)
                     ttk.Label(row, text="→", width=3).pack(side=tk.LEFT)
-                    fake_val = 'S' + str(i + 1).zfill(4)
+                    fake_val = fake_prefix + str(i + 1).zfill(4)
                     lbl = ttk.Label(row, text=fake_val, font=("Consolas", 9), foreground="#2266aa")
                     lbl.pack(side=tk.LEFT)
                     entries.append((val, None, fake_val))
@@ -1708,14 +1748,16 @@ class SynthesizeApp:
             orig_unique_ratio = orig_series.nunique() / len(orig_series)
             if orig_unique_ratio < 0.9:
                 continue  # 원본도 중복 ID가 있으면 그대로 유지
-            # 가짜 ID 재생성 — 행 수만큼 고유 ID 생성
+            # 가짜 ID 재생성 — 행 수만큼 고유 ID 생성 (원본 접두사와 다른 접두사 사용)
             null_mask = final[col].isna()
-            # 기존 매핑에서 prefix 추출
+            orig_vals = sorted([str(v) for v in orig_series.unique()])
+            orig_prefix = _extract_id_prefix(orig_vals)
+            # 기존 매핑에서 이미 다른 접두사가 적용되었으면 그대로 사용
             existing_fakes = [v for v in final[col].dropna().unique()]
-            prefix = 'S'
+            prefix = _pick_different_prefix(orig_prefix)
             if existing_fakes:
                 m = re.match(r'^([A-Za-z]+)', str(existing_fakes[0]))
-                if m:
+                if m and m.group(1).upper() != orig_prefix.upper():
                     prefix = m.group(1)
             new_ids = [f'{prefix}{i+1:05d}' for i in range(len(final))]
             final[col] = new_ids
