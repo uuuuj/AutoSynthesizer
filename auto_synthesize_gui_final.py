@@ -1294,6 +1294,7 @@ class SynthesizeApp:
             filetypes=[("Excel", "*.xlsx *.xls *.xlsm"), ("All", "*.*")])
         if not p:
             return
+        self._refresh_all()
         self.excel_path.set(p)
         self.save_dir.set(os.path.dirname(p))
         self.save_name.set(os.path.splitext(os.path.basename(p))[0] + "_합성데이터")
@@ -1335,6 +1336,28 @@ class SynthesizeApp:
         if not path:
             messagebox.showwarning("경고", "엑셀 파일을 먼저 선택해 주세요.")
             return
+
+        # 이전 분석 상태 초기화
+        self.df = None
+        self.info = None
+        self.col_types = {}
+        self.col_entry_map = {}
+        self.col_rename_entries = {}
+        self.original_columns = []
+        self._data_confirmed = False
+        for w in self.rename_inner.winfo_children():
+            w.destroy()
+        for w in self.input_inner.winfo_children():
+            w.destroy()
+        self.confirm_btn.config(state='normal', bg="#27ae60", text="  ✅  변환 계획 확정  ")
+        self.confirm_guide.config(
+            text="▲ 컬럼명과 가짜 데이터를 확인한 뒤, 위 버튼을 눌러 변환 계획을 확정하세요.")
+        self.after_confirm_lbl.config(text="")
+        self.run_btn.config(state='disabled')
+        self.log_text.config(state=tk.NORMAL)
+        self.log_text.delete("1.0", tk.END)
+        self.log_text.config(state=tk.DISABLED)
+        self.progress['value'] = 0
 
         self.status_lbl.config(text="파일 로드 중...")
         self.root.update_idletasks()
