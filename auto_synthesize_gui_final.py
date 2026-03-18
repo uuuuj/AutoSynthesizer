@@ -1357,9 +1357,13 @@ class SynthesizeApp:
             new_entry_map[new_col] = entries
         self.col_entry_map = new_entry_map
 
-        # UI 갱신
-        self._build_rename_widgets()
-        self._build_input_widgets()
+        # UI 갱신: Entry 비활성화 (재빌드하지 않음)
+        new_rename_entries = {}
+        for old_col, entry in self.col_rename_entries.items():
+            new_col = rename_map.get(old_col, old_col)
+            new_rename_entries[new_col] = entry
+            entry.config(state='disabled')
+        self.col_rename_entries = new_rename_entries
 
         # 분석 텍스트 갱신
         icons = {'numerical': '📐수치', 'datetime': '📅날짜', 'categorical': '🏷️범주'}
