@@ -25,13 +25,11 @@
 - `xlwings`(COM 기반) → `openpyxl`(순수 파이썬) 순으로 시도
 - 로드 후 `_postprocess_dataframe`에서 한글 날짜(`2024년 3월 15일`), 오전/오후 시간, 콤마 숫자 등을 자동 파싱
 
-### 2. 행 수 제한 및 컬럼 타입 감지
+### 2. 컬럼 타입 감지 (`auto_detect_column_type`, line 416)
 
-- 엑셀 로드 후 **500행 초과** 시 상위 500행만 유지하고 나머지는 제거 (사용자에게 안내 메시지 표시)
-- `auto_detect_column_type` (line 416)으로 컬럼 타입 감지:
-  - `datetime`: datetime64 타입이거나 날짜 패턴 문자열
-  - `numerical`: 숫자형이면서 고유값 비율 > 5%
-  - `categorical`: 그 외 전부 (문자열, 저카디널리티 숫자 포함)
+- `datetime`: datetime64 타입이거나 날짜 패턴 문자열
+- `numerical`: 숫자형이면서 고유값 비율 > 5%
+- `categorical`: 그 외 전부 (문자열, 저카디널리티 숫자 포함)
 
 ### 3. 문자열 합성 (`synthesize_text_columns`, line 441)
 
@@ -43,7 +41,7 @@
 - 한글 이름 패턴 → `generate_fake_persons` (성+이름 조합)
 - 회사명 컬럼 → `generate_fake_companies` (Alpha-Corp 형태)
 - 그 외 → `generate_auto_codes` (컬럼명 기반 코드)
-- ID형 컬럼은 원본 접두사와 다른 접두사로 자동 재생성 (예: 원본 `S0001` → 가짜 `X0001`). 후보 접두사: `X, F, Z, Q, W, J, V, P, R, T`
+- ID형 컬럼은 `S0001, S0002...` 형태로 자동 재생성
 
 ### 5. 수치/날짜 합성 (`generate_numeric_datetime`, line 509)
 
@@ -70,6 +68,7 @@
 | `_description.json` | 합성 방법 설명 |
 | `_품질리포트.json` | 품질 점수, 상관관계, 제약조건 정보 |
 
-### 8. 복원 탭
+### 8. 복원 탭 (탭2, line 1260)
 
-- 삭제됨 (2026-03-18). 복원 기능 불필요로 판단하여 제거.
+- 합성 데이터 `.xlsx` + `_변환키.json`을 입력하면
+- 가짜값→원본값 역매핑 + 변경된 컬럼명→원본 컬럼명으로 복원하여 `_복원.xlsx`로 저장

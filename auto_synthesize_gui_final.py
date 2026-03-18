@@ -1539,11 +1539,21 @@ class SynthesizeApp:
 
     # ── 자동 채우기 ──────────────────────────────────────
 
+    def _get_renamed_col(self, col):
+        """컬럼명 변경 Entry에 입력된 새 이름을 반환. 비어있으면 원본 컬럼명 반환."""
+        if col in self.col_rename_entries:
+            new_name = self.col_rename_entries[col].get().strip()
+            if new_name:
+                return new_name
+        return col
+
     def _auto_fill_column(self, col):
         if col not in self.col_entry_map:
             return
         entries = self.col_entry_map[col]
         n = len(entries)
+        # 변환된 컬럼명 기반으로 코드 생성
+        display_col = self._get_renamed_col(col)
         seed = abs(hash(col)) % 9999
 
         series = self.df[col].dropna().astype(str)
@@ -1552,12 +1562,12 @@ class SynthesizeApp:
         elif str(col).lower() in ['client', '고객', '발주', '선주', 'company', '업체']:
             pool = generate_fake_companies(n, seed=seed)
         else:
-            pool = generate_auto_codes(col, n, seed=seed)
+            pool = generate_auto_codes(display_col, n, seed=seed)
 
         for i, (val, entry, fixed) in enumerate(entries):
             if entry is not None and not entry.get().strip():
                 entry.delete(0, tk.END)
-                entry.insert(0, pool[i] if i < len(pool) else f"{str(col)[:4]}_{i}")
+                entry.insert(0, pool[i] if i < len(pool) else f"{str(display_col)[:4]}_{i}")
 
     def _auto_fill_all(self):
         for col in self.col_entry_map:
@@ -1578,7 +1588,8 @@ class SynthesizeApp:
                     if not fake:
                         idx = len(mapping)
                         alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-                        fake = f"{str(col)[:4]}_{alpha[idx] if idx < 26 else str(idx)}"
+                        display_col = self._get_renamed_col(col)
+                        fake = f"{str(display_col)[:4]}_{alpha[idx] if idx < 26 else str(idx)}"
                     mapping[val] = fake
             if mapping:
                 mapping_dict[col] = mapping
