@@ -425,7 +425,7 @@ def auto_detect_column_type(series):
         if smp_str.str.match(r'\d{4}[-/]\d{2}[-/]\d{2}').mean() > 0.8:
             return 'datetime'
     if pd.api.types.is_numeric_dtype(series):
-        return 'categorical' if series.nunique()/len(series) < 0.05 else 'numerical'
+        return 'numerical'
     if series.dtype == object:
         if series.nunique()/len(series) < 0.15: return 'categorical'
     return 'categorical'
@@ -469,77 +469,6 @@ def _pick_different_prefix(orig_prefix: str) -> str:
         if candidate != upper:
             return candidate
     return 'FID'
-
-
-# ══════════════════════════════════════════════════════════════
-# 숫자형 범주 컬럼 변환 (값이 동일/소수인 경우)
-# ══════════════════════════════════════════════════════════════
-
-def _generate_fake_numeric(value):
-    """
-    숫자형 범주 값을 원본과 다른 가짜 값으로 변환.
-
-    Args:
-        value: 원본 숫자 값
-
-    Returns:
-        가짜 숫자 값 (원본과 다른 값)
-    """
-    if isinstance(value, float) and not value.is_integer():
-        # 소수: 소수점 자릿수 유지하면서 다른 값 생성
-        decimals = len(str(value).split('.')[-1])
-        offset = round(0.3 + (abs(hash(str(value))) % 5) * 0.1, decimals)
-        return round(value + offset, decimals)
-    else:
-        # 정수: +1~+5 범위에서 다른 값 생성
-        offset = (abs(hash(str(value))) % 5) + 1
-        return int(value + offset)
-
-
-def synthesize_numeric_categorical(df, col_types):
-    """
-    숫자형이면서 categorical로 분류된 컬럼의 고유값을 가짜 값으로 치환.
-    null 값은 그대로 유지.
-
-    Args:
-        df (pd.DataFrame): 입력 DataFrame
-        col_types (dict): 컬럼별 타입 딕셔너리
-
-    Returns:
-        tuple: (변환된 DataFrame, 매핑 정보 dict)
-    """
-    syn = df.copy()
-    num_cat_map = {}
-
-    for col in df.columns:
-        if col_types.get(col) != 'categorical':
-            continue
-        if not pd.api.types.is_numeric_dtype(df[col]):
-            continue
-
-        unique_vals = df[col].dropna().unique()
-        if len(unique_vals) == 0:
-            continue
-
-        # 각 고유값에 대해 가짜 값 생성
-        mapping = {}
-        used_fakes = set()
-        for val in unique_vals:
-            fake = _generate_fake_numeric(val)
-            # 중복 방지
-            while fake in used_fakes or fake in unique_vals:
-                fake = fake + 1 if isinstance(fake, int) else round(fake + 0.1, 2)
-            mapping[val] = fake
-            used_fakes.add(fake)
-
-        # 매핑 적용 (null 보존)
-        null_mask = df[col].isna()
-        syn[col] = df[col].map(mapping)
-        syn[col] = syn[col].where(~null_mask, other=np.nan)
-
-        num_cat_map[col] = mapping
-
-    return syn, num_cat_map
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1765,7 +1694,7 @@ class SynthesizeApp:
         L("=" * 55); L("  합성 데이터 생성 시작"); L("=" * 55)
 
         # 1. 매핑 수집
-        P(0); S("[1/9] 매핑 수집..."); L("\n[1/9] 매핑 수집...")
+        P(0); S("[1/8] 매핑 수집..."); L("\n[1/8] 매핑 수집...")
         mapping_dict = self._collect_mappings()
         for col, mp in mapping_dict.items():
             L(f"  📋 {col}: {len(mp)}개 매핑")
@@ -1774,22 +1703,12 @@ class SynthesizeApp:
                 L(f"     {o[:15]} → {f[:15]}")
 
         # 2. 문자열 합성 (null 보존)
-        P(10); S("[2/9] 문자열 합성..."); L("\n[2/9] 문자열 합성...")
+        P(12); S("[2/8] 문자열 합성..."); L("\n[2/8] 문자열 합성...")
         df_text, desc_map = synthesize_text_columns(df, ct, mapping_dict)
         L(f"  완료: {len(desc_map)}개 컬럼")
 
-        # 3. 숫자형 범주 컬럼 변환
-        P(20); S("[3/9] 숫자형 범주 변환..."); L("\n[3/9] 숫자형 범주 컬럼 변환...")
-        df_text, num_cat_map = synthesize_numeric_categorical(df_text, ct)
-        if num_cat_map:
-            for col, mapping in num_cat_map.items():
-                for orig, fake in mapping.items():
-                    L(f"  📋 {col}: {orig} → {fake}")
-        else:
-            L("  대상 컬럼 없음")
-
-        # 4. 함수 종속성 감지 [Issue 3]
-        P(30); S("[4/9] 종속성 분석..."); L("\n[4/9] 컬럼 간 함수 종속성 분석...")
+        # 3. 함수 종속성 감지 [Issue 3]
+        P(25); S("[3/8] 종속성 분석..."); L("\n[3/8] 컬럼 간 함수 종속성 분석...")
         func_deps = detect_functional_dependencies(df, ct)
         if func_deps:
             for dep in func_deps:
@@ -1798,7 +1717,7 @@ class SynthesizeApp:
             L("  종속 관계 없음")
 
         # 5. 상관관계
-        P(40); S("[5/9] 상관관계..."); L("\n[5/9] 상관관계 분석...")
+        P(37); S("[4/8] 상관관계..."); L("\n[4/8] 상관관계 분석...")
         cr = analyze_correlations(df, ct)
         if cr.get('strong_pairs'):
             for p in cr['strong_pairs']:
@@ -1807,7 +1726,7 @@ class SynthesizeApp:
             L("  강한 상관관계 없음")
 
         # 6. 제약
-        P(50); S("[6/9] 제약조건..."); L("\n[6/9] 제약 조건...")
+        P(50); S("[5/8] 제약조건..."); L("\n[5/8] 제약 조건...")
         cons = auto_detect_constraints(df, ct)
         for c in cons:
             if c['type'] == 'positive':      L(f"  [양수]  {c['column']}")
@@ -1817,7 +1736,7 @@ class SynthesizeApp:
             L("  없음")
 
         # 7. 수치/날짜 (null 비율 유지)
-        P(60); S("[7/9] 수치 합성..."); L("\n[7/9] Gaussian Copula 합성...")
+        P(62); S("[6/8] 수치 합성..."); L("\n[6/8] Gaussian Copula 합성...")
         nr_str = self.num_rows_var.get().strip()
         nr = int(nr_str) if nr_str.isdigit() else None
         syn_num = generate_numeric_datetime(df, ct, cons, nr)
@@ -1825,7 +1744,7 @@ class SynthesizeApp:
         L(f"  {n}행 생성")
 
         # ── [Issue 8] 가중 샘플링: 원본 분포 비율 보존 ──
-        P(75); S("[8/9] 행 조합..."); L("\n[8/9] 행 조합 (분포 보존)...")
+        P(75); S("[7/8] 행 조합..."); L("\n[7/8] 행 조합 (분포 보존)...")
 
         # 행별 가중치 계산 — 범주형 컬럼의 빈도 기반
         cat_cols = [c for c, t in ct.items() if t == 'categorical' and c in df_text.columns]
@@ -1912,7 +1831,7 @@ class SynthesizeApp:
             L(f"  🆔 {col}: {len(final)}개 고유 ID 재생성 ({prefix}00001~)")
 
         # 9. 품질
-        P(88); S("[9/9] 품질 검증..."); L("\n[9/9] 품질 검증...")
+        P(88); S("[8/8] 품질 검증..."); L("\n[8/8] 품질 검증...")
         ov, cs = validate_quality(df, final, ct)
         for c, sc in cs.items():
             bar = '█' * int(sc * 20) + '░' * (20 - int(sc * 20))
@@ -1964,7 +1883,6 @@ class SynthesizeApp:
             'current_columns': [str(c) for c in self.df.columns],
             'column_rename': col_rename_map,
             'value_mapping': {col: mapping for col, mapping in mapping_dict.items()},
-            'numeric_categorical_mapping': {col: {str(k): str(v) for k, v in m.items()} for col, m in num_cat_map.items()},
         }
         out_key = bp + '_변환키.json'
         with open(out_key, 'w', encoding='utf-8') as f:
