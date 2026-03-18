@@ -683,7 +683,36 @@ def generate_numeric_datetime(df, col_types, constraints, num_rows=None):
                 if df[col].dtype in [np.int32, np.int64]:
                     syn[col] = syn[col].round().astype(int)
 
-    # ── Step 5 (최후): null 비율 복원 — 모든 제약 적용 완료 후 ──
+    # ── Step 5: 고유값이 적은 숫자 컬럼에 노이즈 추가 (원본과 다른 값 보장) ──
+    for col in num_cols:
+        if col not in syn.columns:
+            continue
+        orig_unique = df[col].dropna().unique()
+        if len(orig_unique) > 10:
+            continue  # 고유값이 충분히 많으면 스킵
+        col_vals = syn[col].dropna().values.astype(float)
+        if len(col_vals) == 0:
+            continue
+        # 원본 범위 기반 오프셋 계산
+        val_range = orig_unique.max() - orig_unique.min()
+        if val_range == 0:
+            val_range = abs(orig_unique[0]) if orig_unique[0] != 0 else 1.0
+        offset = val_range * 0.3 + 0.5
+        # 소수 여부 판단
+        is_float = any(isinstance(v, float) and not float(v).is_integer()
+                       for v in orig_unique)
+        if is_float:
+            decimals = max(len(str(float(v)).rstrip('0').split('.')[-1])
+                          for v in orig_unique)
+            noise = np.random.uniform(offset * 0.5, offset * 1.5, len(syn))
+            syn[col] = syn[col].apply(
+                lambda x: round(x + offset, decimals) if pd.notna(x) else x)
+        else:
+            int_offset = max(1, int(round(offset)))
+            syn[col] = syn[col].apply(
+                lambda x: int(x + int_offset) if pd.notna(x) else x)
+
+    # ── Step 6 (최후): null 비율 복원 — 모든 제약 적용 완료 후 ──
     for col in syn.columns:
         if col in null_ratios and null_ratios[col] > 0:
             null_count = int(round(n * null_ratios[col]))
