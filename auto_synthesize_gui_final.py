@@ -13,9 +13,9 @@ Excel → 합성 데이터 자동 생성 파이프라인  (GUI 버전)
     ① 엑셀 파일 선택 (xlwings 우선, openpyxl 자동 폴백)
     ② 컬럼 분석 결과 확인 + 컬럼명 변경
     ③ 문자열 컬럼별 가짜 데이터 1:1 입력 (원본값 → 가짜값)
+    ③-1 컬럼별 설명 입력 (외부망에서 변환 컬럼 이해용)
     ④ 저장 경로 / 파일명 설정
     ⑤ 합성 실행 → 진행 로그 실시간 표시
-    ⑥ 원래 데이터로 복원 (변환키 파일 기반)
 """
 
 import os, sys, json, warnings, threading, re
@@ -801,6 +801,7 @@ class SynthesizeApp:
         self.col_types = {}
         self.col_entry_map = {}       # {col_name: [(orig_val, entry_widget, fixed_val), ...]}
         self.col_rename_entries = {}   # {orig_col_name: Entry widget}
+        self.col_desc_entries = {}    # {orig_col_name: Entry widget}  — 컬럼 설명 입력
         self.original_columns = []    # 원본 컬럼명 보존
 
         self._current_step = 0
@@ -876,7 +877,7 @@ class SynthesizeApp:
         ttk.Label(rs2, text="파일 이름:", width=10).pack(side=tk.LEFT)
         ttk.Entry(rs2, textvariable=self.save_name, width=35, font=("Consolas", 9)).pack(
             side=tk.LEFT, padx=(0, 6))
-        ttk.Label(rs2, text=".xlsx / _변환키.json / _description.json / _품질리포트.json 자동 생성",
+        ttk.Label(rs2, text=".xlsx / _컬럼매핑.json / _description.json / _품질리포트.json 자동 생성",
                   style="Sub.TLabel").pack(side=tk.LEFT)
 
         sec5 = ttk.LabelFrame(bottom_frame, text="  ⑤ 실행 로그  ", padding=8)
@@ -975,7 +976,19 @@ class SynthesizeApp:
         self.input_inner = ttk.Frame(sec3)
         self.input_inner.pack(fill=tk.X)
 
-        # ── ③-1 데이터 확정 버튼 + 안내 ──
+        # ── ③-1 컬럼 설명 입력 ──────────────────────────────
+        sec_desc = ttk.LabelFrame(self.main_inner,
+            text="  ③-1 컬럼 설명 입력  (외부망에서 변환된 컬럼을 이해할 수 있도록)  ", padding=8)
+        sec_desc.pack(fill=tk.X, pady=(0, 5), padx=2)
+
+        ttk.Label(sec_desc,
+                  text="각 컬럼에 대한 설명을 작성하세요. 원본 컬럼명을 직접 언급하지 말고, 컬럼의 성격·용도만 기술합니다.",
+                  style="Sub.TLabel").pack(anchor='w', pady=(0, 4))
+
+        self.desc_inner = ttk.Frame(sec_desc)
+        self.desc_inner.pack(fill=tk.X)
+
+        # ── ③-2 데이터 확정 버튼 + 안내 ──
         self.confirm_frame = ttk.Frame(self.main_inner)
         self.confirm_frame.pack(fill=tk.X, pady=(8, 5), padx=2)
 
@@ -989,7 +1002,7 @@ class SynthesizeApp:
 
         self.confirm_guide = tk.Label(
             self.confirm_frame,
-            text="▲ 컬럼명과 가짜 데이터를 확인한 뒤, 위 버튼을 눌러 변환 계획을 확정하세요.",
+            text="▲ 컬럼명·가짜 데이터·컬럼 설명을 확인한 뒤, 위 버튼을 눌러 변환 계획을 확정하세요.",
             font=("맑은 고딕", 9, "bold"), fg="#e67e22")
         self.confirm_guide.pack()
 
@@ -1025,6 +1038,7 @@ class SynthesizeApp:
         self.col_types = {}
         self.col_entry_map = {}
         self.col_rename_entries = {}
+        self.col_desc_entries = {}
         self.original_columns = []
         self._data_confirmed = False
 
@@ -1041,16 +1055,18 @@ class SynthesizeApp:
         self.analysis_text.delete("1.0", tk.END)
         self.analysis_text.config(state=tk.DISABLED)
 
-        # 컬럼명/가짜데이터 위젯 초기화
+        # 컬럼명/가짜데이터/설명 위젯 초기화
         for w in self.rename_inner.winfo_children():
             w.destroy()
         for w in self.input_inner.winfo_children():
+            w.destroy()
+        for w in self.desc_inner.winfo_children():
             w.destroy()
 
         # 확정 버튼 복원
         self.confirm_btn.config(state='normal', bg="#27ae60", text="  ✅  변환 계획 확정  ")
         self.confirm_guide.config(
-            text="▲ 컬럼명과 가짜 데이터를 확인한 뒤, 위 버튼을 눌러 변환 계획을 확정하세요.")
+            text="▲ 컬럼명·가짜 데이터·컬럼 설명을 확인한 뒤, 위 버튼을 눌러 변환 계획을 확정하세요.")
         self.after_confirm_lbl.config(text="")
 
         # 실행 버튼 잠금
@@ -1170,7 +1186,7 @@ class SynthesizeApp:
         hints = [
             "◀ 엑셀 파일을 선택하세요",
             "◀ '📊 파일 분석' 버튼을 클릭하세요",
-            "◀ 자동 입력된 컬럼명·데이터를 확인 후 '✅ 변환 계획 확정' 클릭",
+            "◀ 컬럼명·데이터·설명을 확인 후 '✅ 변환 계획 확정' 클릭",
             "◀ '✅ 변환 계획 확정' 버튼을 클릭하세요",
             "◀ 저장 경로 확인 후 '▶ 합성 데이터 생성 실행' 클릭",
         ]
@@ -1301,15 +1317,18 @@ class SynthesizeApp:
         self.col_types = {}
         self.col_entry_map = {}
         self.col_rename_entries = {}
+        self.col_desc_entries = {}
         self.original_columns = []
         self._data_confirmed = False
         for w in self.rename_inner.winfo_children():
             w.destroy()
         for w in self.input_inner.winfo_children():
             w.destroy()
+        for w in self.desc_inner.winfo_children():
+            w.destroy()
         self.confirm_btn.config(state='normal', bg="#27ae60", text="  ✅  변환 계획 확정  ")
         self.confirm_guide.config(
-            text="▲ 컬럼명과 가짜 데이터를 확인한 뒤, 위 버튼을 눌러 변환 계획을 확정하세요.")
+            text="▲ 컬럼명·가짜 데이터·컬럼 설명을 확인한 뒤, 위 버튼을 눌러 변환 계획을 확정하세요.")
         self.after_confirm_lbl.config(text="")
         self.run_btn.config(state='disabled')
         self.log_text.config(state=tk.NORMAL)
@@ -1358,6 +1377,7 @@ class SynthesizeApp:
         self._auto_fill_column_names()   # 자동 컬럼명 입력
         self._build_input_widgets()
         self._auto_fill_all()            # 자동 가짜 데이터 입력
+        self._build_desc_widgets()       # 컬럼 설명 입력 위젯 생성
         self._set_step(2)                # → 확인/수정 단계
         self.status_lbl.config(text=f"분석 완료 ({engine}) — 컬럼명·데이터가 자동 입력되었습니다. 확인 후 실행하세요.")
 
@@ -1588,6 +1608,77 @@ class SynthesizeApp:
                     entries.append((val, entry, None))
 
             self.col_entry_map[col] = entries
+
+    # ── 컬럼 설명 입력 위젯 동적 생성 ─────────────────────
+
+    def _build_desc_widgets(self) -> None:
+        """
+        변환된 컬럼명 옆에 원본 컬럼에 대한 설명을 입력받는 위젯을 생성한다.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+        for w in self.desc_inner.winfo_children():
+            w.destroy()
+        self.col_desc_entries = {}
+
+        if self.df is None:
+            return
+
+        # 헤더
+        header = ttk.Frame(self.desc_inner)
+        header.pack(fill=tk.X, padx=5, pady=(2, 4))
+        ttk.Label(header, text="No.", width=5,
+                  font=("맑은 고딕", 9, "bold")).pack(side=tk.LEFT)
+        ttk.Label(header, text="변환 컬럼명", width=20,
+                  font=("맑은 고딕", 9, "bold"), anchor='w').pack(side=tk.LEFT, padx=(5, 0))
+        ttk.Label(header, text="설명 (원본 컬럼명 직접 언급 금지)", width=50,
+                  font=("맑은 고딕", 9, "bold"), anchor='w').pack(side=tk.LEFT, padx=(10, 0))
+
+        ttk.Separator(self.desc_inner, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=5)
+
+        for idx, col in enumerate(self.df.columns):
+            row = ttk.Frame(self.desc_inner)
+            row.pack(fill=tk.X, padx=5, pady=1)
+
+            ttk.Label(row, text=f"{idx+1}", width=5, font=("Consolas", 9),
+                      foreground="#999").pack(side=tk.LEFT)
+
+            # 변환된 컬럼명 표시 (rename Entry에 값이 있으면 그 값, 없으면 현재 컬럼명)
+            display_name = self._get_renamed_col(col) if hasattr(self, '_get_renamed_col') else str(col)
+            ttk.Label(row, text=str(display_name)[:25], width=20, anchor='w',
+                      font=("Consolas", 9), foreground="#2266aa").pack(side=tk.LEFT, padx=(5, 0))
+
+            entry = ttk.Entry(row, font=("Consolas", 9), width=55)
+            entry.pack(side=tk.LEFT, padx=(10, 0), fill=tk.X, expand=True)
+
+            # placeholder 안내
+            col_type = self.col_types.get(col, 'categorical')
+            type_hint = {'numerical': '수치', 'datetime': '날짜', 'categorical': '범주'}
+            hint = (f"이 {type_hint.get(col_type, '데이터')} 컬럼이 담고 있는 정보의 성격을 서술하세요 "
+                    f"(예: 작업 수행 인원 수, 공정 소요 일수 등)")
+            entry.insert(0, hint)
+            entry.config(foreground="#aaa")
+
+            def _on_focus_in(e: object, ent: ttk.Entry = entry, h: str = hint) -> None:
+                """Entry 포커스 진입 시 placeholder를 제거한다."""
+                if ent.get() == h:
+                    ent.delete(0, tk.END)
+                    ent.config(foreground="#000")
+
+            def _on_focus_out(e: object, ent: ttk.Entry = entry, h: str = hint) -> None:
+                """Entry 포커스 이탈 시 비어있으면 placeholder를 복원한다."""
+                if not ent.get().strip():
+                    ent.insert(0, h)
+                    ent.config(foreground="#aaa")
+
+            entry.bind("<FocusIn>", _on_focus_in)
+            entry.bind("<FocusOut>", _on_focus_out)
+
+            self.col_desc_entries[col] = entry
 
     # ── 자동 채우기 ──────────────────────────────────────
 
@@ -1888,39 +1979,36 @@ class SynthesizeApp:
         final.to_excel(out_xl, index=False)
         L(f"  ✅ Excel       : {out_xl}")
 
-        # ── 변환키 파일 저장 (컬럼명 변경 + 값 매핑) ──
-        col_rename_map = {}
-        for orig_col in self.original_columns:
-            for current_col in self.df.columns:
-                if orig_col != current_col:
-                    # original_columns에 있지만 현재 컬럼에 없는 것 = 변경됨
-                    pass
-            # 더 정확하게: original_columns[i] vs df.columns[i]
-        # original_columns와 현재 columns 비교
-        col_rename_map = {}
+        # ── 컬럼매핑 파일 저장 (원본 컬럼 → 변환 컬럼) ──
+        col_mapping = {}
         for i, orig_col in enumerate(self.original_columns):
             if i < len(self.df.columns):
-                current_col = self.df.columns[i]
-                if str(orig_col) != str(current_col):
-                    col_rename_map[str(orig_col)] = str(current_col)
+                current_col = str(self.df.columns[i])
+                col_mapping[str(orig_col)] = current_col
 
-        key_data = {
+        mapping_data = {
             'generated_at': datetime.now().isoformat(),
-            'source_file': self.info['file_path'],
-            'sheet_name': self.info['sheet_name'],
-            'original_columns': [str(c) for c in self.original_columns],
-            'current_columns': [str(c) for c in self.df.columns],
-            'column_rename': col_rename_map,
-            'value_mapping': {col: mapping for col, mapping in mapping_dict.items()},
+            'column_mapping': col_mapping,
         }
-        out_key = bp + '_변환키.json'
-        with open(out_key, 'w', encoding='utf-8') as f:
-            json.dump(key_data, f, ensure_ascii=False, indent=2, default=str)
-        L(f"  ✅ 변환키      : {out_key}")
+        out_map = bp + '_컬럼매핑.json'
+        with open(out_map, 'w', encoding='utf-8') as f:
+            json.dump(mapping_data, f, ensure_ascii=False, indent=2, default=str)
+        L(f"  ✅ 컬럼매핑    : {out_map}")
+
+        # ── Description 파일 저장 (변환 컬럼명 + 사용자 입력 설명) ──
+        desc_data = {}
+        for orig_col, entry in self.col_desc_entries.items():
+            text = entry.get().strip()
+            # placeholder 텍스트는 무시
+            if "컬럼이 담고 있는 정보의 성격을 서술하세요" in text:
+                text = ""
+            # 변환된 컬럼명 찾기
+            mapped_col = col_mapping.get(str(orig_col), str(orig_col))
+            desc_data[mapped_col] = text
 
         out_desc = bp + '_description.json'
         with open(out_desc, 'w', encoding='utf-8') as f:
-            json.dump(desc_map, f, ensure_ascii=False, indent=2, default=str)
+            json.dump(desc_data, f, ensure_ascii=False, indent=2, default=str)
         L(f"  ✅ Description : {out_desc}")
 
         out_rpt = bp + '_품질리포트.json'
