@@ -13,7 +13,7 @@ Excel → 합성 데이터 자동 생성 파이프라인  (GUI 버전)
     ① 엑셀 파일 선택 (xlwings 우선, openpyxl 자동 폴백)
     ② 컬럼 분석 결과 확인 + 컬럼명 변경
     ③ 문자열 컬럼별 가짜 데이터 1:1 입력 (원본값 → 가짜값)
-    ③-1 컬럼별 설명 입력 (외부망에서 변환 컬럼 이해용)
+    ②-1 에 컬럼 설명 열 포함 (외부망에서 변환 컬럼 이해용)
     ④ 저장 경로 / 파일명 설정
     ⑤ 합성 실행 → 진행 로그 실시간 표시
 """
@@ -944,7 +944,7 @@ class SynthesizeApp:
         main_sb.pack(side=tk.RIGHT, fill=tk.Y)
 
         # ── ②-1 컬럼명 변경 ─────────────────────────────
-        sec_rename = ttk.LabelFrame(self.main_inner, text="  ②-1 컬럼명 변경  (변경할 컬럼만 새 이름 입력)  ", padding=8)
+        sec_rename = ttk.LabelFrame(self.main_inner, text="  ②-1 컬럼명 변경 + 설명 입력  (변경할 컬럼만 새 이름 입력 / 설명은 외부망 참고용)  ", padding=8)
         sec_rename.pack(fill=tk.X, pady=(0, 5), padx=2)
 
         rename_top = ttk.Frame(sec_rename)
@@ -976,19 +976,7 @@ class SynthesizeApp:
         self.input_inner = ttk.Frame(sec3)
         self.input_inner.pack(fill=tk.X)
 
-        # ── ③-1 컬럼 설명 입력 ──────────────────────────────
-        sec_desc = ttk.LabelFrame(self.main_inner,
-            text="  ③-1 컬럼 설명 입력  (외부망에서 변환된 컬럼을 이해할 수 있도록)  ", padding=8)
-        sec_desc.pack(fill=tk.X, pady=(0, 5), padx=2)
-
-        ttk.Label(sec_desc,
-                  text="각 컬럼에 대한 설명을 작성하세요. 원본 컬럼명을 직접 언급하지 말고, 컬럼의 성격·용도만 기술합니다.",
-                  style="Sub.TLabel").pack(anchor='w', pady=(0, 4))
-
-        self.desc_inner = ttk.Frame(sec_desc)
-        self.desc_inner.pack(fill=tk.X)
-
-        # ── ③-2 데이터 확정 버튼 + 안내 ──
+        # ── ③-1 데이터 확정 버튼 + 안내 ──
         self.confirm_frame = ttk.Frame(self.main_inner)
         self.confirm_frame.pack(fill=tk.X, pady=(8, 5), padx=2)
 
@@ -1059,8 +1047,6 @@ class SynthesizeApp:
         for w in self.rename_inner.winfo_children():
             w.destroy()
         for w in self.input_inner.winfo_children():
-            w.destroy()
-        for w in self.desc_inner.winfo_children():
             w.destroy()
 
         # 확정 버튼 복원
@@ -1324,8 +1310,6 @@ class SynthesizeApp:
             w.destroy()
         for w in self.input_inner.winfo_children():
             w.destroy()
-        for w in self.desc_inner.winfo_children():
-            w.destroy()
         self.confirm_btn.config(state='normal', bg="#27ae60", text="  ✅  변환 계획 확정  ")
         self.confirm_guide.config(
             text="▲ 컬럼명·가짜 데이터·컬럼 설명을 확인한 뒤, 위 버튼을 눌러 변환 계획을 확정하세요.")
@@ -1377,7 +1361,6 @@ class SynthesizeApp:
         self._auto_fill_column_names()   # 자동 컬럼명 입력
         self._build_input_widgets()
         self._auto_fill_all()            # 자동 가짜 데이터 입력
-        self._build_desc_widgets()       # 컬럼 설명 입력 위젯 생성
         self._set_step(2)                # → 확인/수정 단계
         self.status_lbl.config(text=f"분석 완료 ({engine}) — 컬럼명·데이터가 자동 입력되었습니다. 확인 후 실행하세요.")
 
@@ -1395,13 +1378,15 @@ class SynthesizeApp:
         # 헤더 행
         header = ttk.Frame(self.rename_inner)
         header.pack(fill=tk.X, padx=5, pady=(2, 4))
-        ttk.Label(header, text="No.", width=5, font=("맑은 고딕", 9, "bold")).pack(side=tk.LEFT)
-        ttk.Label(header, text="기존 컬럼명", width=25, font=("맑은 고딕", 9, "bold"),
+        ttk.Label(header, text="No.", width=4, font=("맑은 고딕", 9, "bold")).pack(side=tk.LEFT)
+        ttk.Label(header, text="기존 컬럼명", width=18, font=("맑은 고딕", 9, "bold"),
                   anchor='w').pack(side=tk.LEFT, padx=(5, 0))
-        ttk.Label(header, text="→", width=3, font=("맑은 고딕", 9, "bold")).pack(side=tk.LEFT)
-        ttk.Label(header, text="새 컬럼명 (비우면 유지)", width=30,
+        ttk.Label(header, text="→", width=2, font=("맑은 고딕", 9, "bold")).pack(side=tk.LEFT)
+        ttk.Label(header, text="새 컬럼명", width=15,
                   font=("맑은 고딕", 9, "bold"), anchor='w').pack(side=tk.LEFT)
-        ttk.Label(header, text="타입", width=8, font=("맑은 고딕", 9, "bold")).pack(side=tk.LEFT)
+        ttk.Label(header, text="타입", width=10, font=("맑은 고딕", 9, "bold")).pack(side=tk.LEFT)
+        ttk.Label(header, text="설명 (원본 컬럼명 직접 언급 금지 — 외부망 참고용)",
+                  font=("맑은 고딕", 9, "bold"), anchor='w').pack(side=tk.LEFT, padx=(8, 0))
 
         ttk.Separator(self.rename_inner, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=5)
 
@@ -1410,20 +1395,45 @@ class SynthesizeApp:
             row = ttk.Frame(self.rename_inner)
             row.pack(fill=tk.X, padx=5, pady=1)
 
-            ttk.Label(row, text=f"{idx+1}", width=5, font=("Consolas", 9),
+            ttk.Label(row, text=f"{idx+1}", width=4, font=("Consolas", 9),
                       foreground="#999").pack(side=tk.LEFT)
-            ttk.Label(row, text=str(col)[:30], width=25, anchor='w',
+            ttk.Label(row, text=str(col)[:25], width=18, anchor='w',
                       font=("Consolas", 9)).pack(side=tk.LEFT, padx=(5, 0))
-            ttk.Label(row, text="→", width=3).pack(side=tk.LEFT)
+            ttk.Label(row, text="→", width=2).pack(side=tk.LEFT)
 
-            entry = ttk.Entry(row, font=("Consolas", 9), width=30)
-            entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-            self.col_rename_entries[col] = entry
+            rename_entry = ttk.Entry(row, font=("Consolas", 9), width=15)
+            rename_entry.pack(side=tk.LEFT)
+            self.col_rename_entries[col] = rename_entry
 
             col_type = self.col_types.get(col, 'categorical')
             icon = icons.get(col_type, '🏷️')
-            ttk.Label(row, text=f"{icon}{col_type}", width=12,
+            ttk.Label(row, text=f"{icon}{col_type}", width=10,
                       font=("맑은 고딕", 8), foreground="#888").pack(side=tk.LEFT, padx=(5, 0))
+
+            # 설명 입력 Entry (placeholder 포함)
+            desc_entry = ttk.Entry(row, font=("Consolas", 9), width=40)
+            desc_entry.pack(side=tk.LEFT, padx=(8, 0), fill=tk.X, expand=True)
+
+            placeholder = "변환 컬럼만 보고 원본을 연상할 수 있도록 성격·용도를 서술"
+            desc_entry.insert(0, placeholder)
+            desc_entry.config(foreground="#aaa")
+
+            def _on_focus_in(e: object, ent: ttk.Entry = desc_entry, h: str = placeholder) -> None:
+                """Entry 포커스 진입 시 placeholder를 제거한다."""
+                if ent.get() == h:
+                    ent.delete(0, tk.END)
+                    ent.config(foreground="#000")
+
+            def _on_focus_out(e: object, ent: ttk.Entry = desc_entry, h: str = placeholder) -> None:
+                """Entry 포커스 이탈 시 비어있으면 placeholder를 복원한다."""
+                if not ent.get().strip():
+                    ent.insert(0, h)
+                    ent.config(foreground="#aaa")
+
+            desc_entry.bind("<FocusIn>", _on_focus_in)
+            desc_entry.bind("<FocusOut>", _on_focus_out)
+
+            self.col_desc_entries[col] = desc_entry
 
     def _apply_column_rename(self):
         """사용자가 입력한 컬럼명을 적용"""
@@ -1608,77 +1618,6 @@ class SynthesizeApp:
                     entries.append((val, entry, None))
 
             self.col_entry_map[col] = entries
-
-    # ── 컬럼 설명 입력 위젯 동적 생성 ─────────────────────
-
-    def _build_desc_widgets(self) -> None:
-        """
-        변환된 컬럼명 옆에 원본 컬럼에 대한 설명을 입력받는 위젯을 생성한다.
-
-        Args:
-            None
-
-        Returns:
-            None
-        """
-        for w in self.desc_inner.winfo_children():
-            w.destroy()
-        self.col_desc_entries = {}
-
-        if self.df is None:
-            return
-
-        # 헤더
-        header = ttk.Frame(self.desc_inner)
-        header.pack(fill=tk.X, padx=5, pady=(2, 4))
-        ttk.Label(header, text="No.", width=5,
-                  font=("맑은 고딕", 9, "bold")).pack(side=tk.LEFT)
-        ttk.Label(header, text="변환 컬럼명", width=20,
-                  font=("맑은 고딕", 9, "bold"), anchor='w').pack(side=tk.LEFT, padx=(5, 0))
-        ttk.Label(header, text="설명 (원본 컬럼명 직접 언급 금지)", width=50,
-                  font=("맑은 고딕", 9, "bold"), anchor='w').pack(side=tk.LEFT, padx=(10, 0))
-
-        ttk.Separator(self.desc_inner, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=5)
-
-        for idx, col in enumerate(self.df.columns):
-            row = ttk.Frame(self.desc_inner)
-            row.pack(fill=tk.X, padx=5, pady=1)
-
-            ttk.Label(row, text=f"{idx+1}", width=5, font=("Consolas", 9),
-                      foreground="#999").pack(side=tk.LEFT)
-
-            # 변환된 컬럼명 표시 (rename Entry에 값이 있으면 그 값, 없으면 현재 컬럼명)
-            display_name = self._get_renamed_col(col) if hasattr(self, '_get_renamed_col') else str(col)
-            ttk.Label(row, text=str(display_name)[:25], width=20, anchor='w',
-                      font=("Consolas", 9), foreground="#2266aa").pack(side=tk.LEFT, padx=(5, 0))
-
-            entry = ttk.Entry(row, font=("Consolas", 9), width=55)
-            entry.pack(side=tk.LEFT, padx=(10, 0), fill=tk.X, expand=True)
-
-            # placeholder 안내
-            col_type = self.col_types.get(col, 'categorical')
-            type_hint = {'numerical': '수치', 'datetime': '날짜', 'categorical': '범주'}
-            hint = (f"이 {type_hint.get(col_type, '데이터')} 컬럼이 담고 있는 정보의 성격을 서술하세요 "
-                    f"(예: 작업 수행 인원 수, 공정 소요 일수 등)")
-            entry.insert(0, hint)
-            entry.config(foreground="#aaa")
-
-            def _on_focus_in(e: object, ent: ttk.Entry = entry, h: str = hint) -> None:
-                """Entry 포커스 진입 시 placeholder를 제거한다."""
-                if ent.get() == h:
-                    ent.delete(0, tk.END)
-                    ent.config(foreground="#000")
-
-            def _on_focus_out(e: object, ent: ttk.Entry = entry, h: str = hint) -> None:
-                """Entry 포커스 이탈 시 비어있으면 placeholder를 복원한다."""
-                if not ent.get().strip():
-                    ent.insert(0, h)
-                    ent.config(foreground="#aaa")
-
-            entry.bind("<FocusIn>", _on_focus_in)
-            entry.bind("<FocusOut>", _on_focus_out)
-
-            self.col_desc_entries[col] = entry
 
     # ── 자동 채우기 ──────────────────────────────────────
 
@@ -2000,7 +1939,7 @@ class SynthesizeApp:
         for orig_col, entry in self.col_desc_entries.items():
             text = entry.get().strip()
             # placeholder 텍스트는 무시
-            if "컬럼이 담고 있는 정보의 성격을 서술하세요" in text:
+            if "원본을 연상할 수 있도록 성격" in text:
                 text = ""
             # 변환된 컬럼명 찾기
             mapped_col = col_mapping.get(str(orig_col), str(orig_col))
