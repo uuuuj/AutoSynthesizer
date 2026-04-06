@@ -11,11 +11,10 @@ Excel → 합성 데이터 자동 생성 파이프라인  (GUI 버전)
 
 [GUI 구성]
     ① 엑셀 파일 선택 (xlwings 우선, openpyxl 자동 폴백)
-    ② 컬럼 분석 결과 확인 + 컬럼명 변경
-    ③ 문자열 컬럼별 가짜 데이터 1:1 입력 (원본값 → 가짜값)
-    ②-1 에 컬럼 설명 열 포함 (외부망에서 변환 컬럼 이해용)
-    ④ 저장 경로 / 파일명 설정
-    ⑤ 합성 실행 → 진행 로그 실시간 표시
+    ② 컬럼 분석 결과 확인 + 컬럼명 변경 + 설명 입력
+    ③ 저장 경로 / 파일명 설정
+    ④ 합성 실행 → 진행 로그 실시간 표시
+    * 가짜 데이터 매핑은 내부 자동 생성 (결과는 엑셀에서 확인)
 """
 
 import os, sys, json, warnings, threading, re
@@ -799,7 +798,6 @@ class SynthesizeApp:
         self.df = None
         self.info = None
         self.col_types = {}
-        self.col_entry_map = {}       # {col_name: [(orig_val, entry_widget, fixed_val), ...]}
         self.col_rename_entries = {}   # {orig_col_name: Entry widget}
         self.col_desc_entries = {}    # {orig_col_name: Entry widget}  — 컬럼 설명 입력
         self.original_columns = []    # 원본 컬럼명 보존
@@ -927,7 +925,7 @@ class SynthesizeApp:
                                      bg="#f5f5f0", state=tk.DISABLED, wrap=tk.WORD)
         self.analysis_text.pack(fill=tk.X, pady=(0, 5))
 
-        # ══ 중간 스크롤 영역: ②-1 컬럼명 변경 + ③ 가짜데이터 ══
+        # ══ 중간 스크롤 영역: ②-1 컬럼명 변경 + 확정 ══
         mid_frame = ttk.Frame(tab_synth)
         mid_frame.pack(fill=tk.BOTH, expand=True)
 
@@ -959,24 +957,7 @@ class SynthesizeApp:
         self.rename_inner = ttk.Frame(sec_rename)
         self.rename_inner.pack(fill=tk.X)
 
-        # ── ③ 가짜 데이터 1:1 입력 ──────────────────────
-        sec3 = ttk.LabelFrame(self.main_inner, text="  ③ 가짜 데이터 입력  (원본값 → 가짜값)  ", padding=8)
-        sec3.pack(fill=tk.X, pady=(0, 5), padx=2)
-
-        top_bar = ttk.Frame(sec3)
-        top_bar.pack(fill=tk.X, pady=(0, 6))
-        ttk.Label(top_bar,
-                  text="각 원본값 옆에 가짜값을 입력하세요.  비운 항목은 자동 채우기로 한번에 채울 수 있습니다.",
-                  style="Sub.TLabel").pack(side=tk.LEFT)
-        self.auto_all_btn = ttk.Button(top_bar, text="🔄 전체 자동 채우기",
-                                        command=self._auto_fill_all, style="Auto.TButton")
-        self.auto_all_btn.pack(side=tk.RIGHT)
-
-        # 가짜 데이터 내부 프레임 (스크롤 없이 직접 배치 → 전체 스크롤에 포함)
-        self.input_inner = ttk.Frame(sec3)
-        self.input_inner.pack(fill=tk.X)
-
-        # ── ③-1 데이터 확정 버튼 + 안내 ──
+        # ── ③ 변환 계획 확정 버튼 + 안내 ──
         self.confirm_frame = ttk.Frame(self.main_inner)
         self.confirm_frame.pack(fill=tk.X, pady=(8, 5), padx=2)
 
@@ -990,7 +971,7 @@ class SynthesizeApp:
 
         self.confirm_guide = tk.Label(
             self.confirm_frame,
-            text="▲ 컬럼명·가짜 데이터·컬럼 설명을 확인한 뒤, 위 버튼을 눌러 변환 계획을 확정하세요.",
+            text="▲ 컬럼명·컬럼 설명을 확인한 뒤, 위 버튼을 눌러 변환 계획을 확정하세요.",
             font=("맑은 고딕", 9, "bold"), fg="#e67e22")
         self.confirm_guide.pack()
 
@@ -1024,7 +1005,6 @@ class SynthesizeApp:
         self.df = None
         self.info = None
         self.col_types = {}
-        self.col_entry_map = {}
         self.col_rename_entries = {}
         self.col_desc_entries = {}
         self.original_columns = []
@@ -1043,16 +1023,14 @@ class SynthesizeApp:
         self.analysis_text.delete("1.0", tk.END)
         self.analysis_text.config(state=tk.DISABLED)
 
-        # 컬럼명/가짜데이터/설명 위젯 초기화
+        # 컬럼명/설명 위젯 초기화
         for w in self.rename_inner.winfo_children():
-            w.destroy()
-        for w in self.input_inner.winfo_children():
             w.destroy()
 
         # 확정 버튼 복원
         self.confirm_btn.config(state='normal', bg="#27ae60", text="  ✅  변환 계획 확정  ")
         self.confirm_guide.config(
-            text="▲ 컬럼명·가짜 데이터·컬럼 설명을 확인한 뒤, 위 버튼을 눌러 변환 계획을 확정하세요.")
+            text="▲ 컬럼명·컬럼 설명을 확인한 뒤, 위 버튼을 눌러 변환 계획을 확정하세요.")
         self.after_confirm_lbl.config(text="")
 
         # 실행 버튼 잠금
@@ -1067,39 +1045,11 @@ class SynthesizeApp:
         # 단계 초기화
         self._set_step(0)
 
-    def _validate_mappings(self):
-        """가짜값 중복 검사 — 같은 가짜값이 서로 다른 원본값에 할당되면 복원 불가."""
-        issues = []
-        for col, entries in self.col_entry_map.items():
-            fake_to_orig = {}
-            for val, entry, fixed in entries:
-                fake = fixed if fixed is not None else (entry.get().strip() if entry else None)
-                if not fake:
-                    continue
-                if fake in fake_to_orig:
-                    issues.append(
-                        f"  ⚠ '{col}' 컬럼: 가짜값 '{fake}'이(가) "
-                        f"'{fake_to_orig[fake]}'와 '{val}'에 중복 할당됨"
-                    )
-                else:
-                    fake_to_orig[fake] = val
-        return issues
-
     def _confirm_data(self):
         """변환 계획을 확정하고 실행 단계로 진행."""
         if self.df is None:
             messagebox.showwarning("경고", "먼저 파일을 분석해 주세요.")
             return
-
-        # ── Issue 1: 매핑 중복 검증 ──
-        dup_issues = self._validate_mappings()
-        if dup_issues:
-            msg = ("가짜값이 중복된 항목이 있습니다.\n"
-                   "이대로 진행하면 복원 시 구분이 불가능합니다.\n\n"
-                   + "\n".join(dup_issues)
-                   + "\n\n그래도 진행하시겠습니까?")
-            if not messagebox.askyesno("매핑 중복 경고", msg, icon='warning'):
-                return
 
         # 컬럼명 자동 적용
         if self.col_rename_entries:
@@ -1121,8 +1071,8 @@ class SynthesizeApp:
         # 실행 버튼 활성화
         self.run_btn.config(state='normal')
 
-        # 단계 진행 → ❺ 실행
-        self._set_step(4)
+        # 단계 진행 → ❹ 실행
+        self._set_step(3)
         self.status_lbl.config(text="변환 계획 확정됨 — '▶ 합성 데이터 생성 실행' 버튼을 클릭하세요")
 
     # ══════════════════════════════════════════════════════════
@@ -1139,9 +1089,8 @@ class SynthesizeApp:
         steps = [
             "❶ 파일 선택",
             "❷ 파일 분석",
-            "❸ 확인/수정",
-            "❹ 변환 확정",
-            "❺ 실행",
+            "❸ 확인/확정",
+            "❹ 실행",
         ]
 
         self.step_labels = []
@@ -1172,8 +1121,7 @@ class SynthesizeApp:
         hints = [
             "◀ 엑셀 파일을 선택하세요",
             "◀ '📊 파일 분석' 버튼을 클릭하세요",
-            "◀ 컬럼명·데이터·설명을 확인 후 '✅ 변환 계획 확정' 클릭",
-            "◀ '✅ 변환 계획 확정' 버튼을 클릭하세요",
+            "◀ 컬럼명·설명을 확인 후 '✅ 변환 계획 확정' 클릭",
             "◀ 저장 경로 확인 후 '▶ 합성 데이터 생성 실행' 클릭",
         ]
 
@@ -1234,7 +1182,7 @@ class SynthesizeApp:
                 pass
 
         # 실행 버튼 안내 강조 (실행 단계일 때)
-        if step == 4 and hasattr(self, 'run_btn'):
+        if step == 3 and hasattr(self, 'run_btn'):
             try:
                 if self._blink_state:
                     self.status_lbl.config(foreground="#e74c3c")
@@ -1301,18 +1249,15 @@ class SynthesizeApp:
         self.df = None
         self.info = None
         self.col_types = {}
-        self.col_entry_map = {}
         self.col_rename_entries = {}
         self.col_desc_entries = {}
         self.original_columns = []
         self._data_confirmed = False
         for w in self.rename_inner.winfo_children():
             w.destroy()
-        for w in self.input_inner.winfo_children():
-            w.destroy()
         self.confirm_btn.config(state='normal', bg="#27ae60", text="  ✅  변환 계획 확정  ")
         self.confirm_guide.config(
-            text="▲ 컬럼명·가짜 데이터·컬럼 설명을 확인한 뒤, 위 버튼을 눌러 변환 계획을 확정하세요.")
+            text="▲ 컬럼명·컬럼 설명을 확인한 뒤, 위 버튼을 눌러 변환 계획을 확정하세요.")
         self.after_confirm_lbl.config(text="")
         self.run_btn.config(state='disabled')
         self.log_text.config(state=tk.NORMAL)
@@ -1359,10 +1304,8 @@ class SynthesizeApp:
         self._set_analysis(summary)
         self._build_rename_widgets()
         self._auto_fill_column_names()   # 자동 컬럼명 입력
-        self._build_input_widgets()
-        self._auto_fill_all()            # 자동 가짜 데이터 입력
-        self._set_step(2)                # → 확인/수정 단계
-        self.status_lbl.config(text=f"분석 완료 ({engine}) — 컬럼명·데이터가 자동 입력되었습니다. 확인 후 실행하세요.")
+        self._set_step(2)                # → 확인/확정 단계
+        self.status_lbl.config(text=f"분석 완료 ({engine}) — 컬럼명·설명을 확인 후 변환 계획을 확정하세요.")
 
     # ── 컬럼명 변경 위젯 동적 생성 ───────────────────────
 
@@ -1469,13 +1412,6 @@ class SynthesizeApp:
             new_col_types[new_col] = ctype
         self.col_types = new_col_types
 
-        # [Issue 5] col_entry_map 키도 동기화
-        new_entry_map = {}
-        for old_col, entries in self.col_entry_map.items():
-            new_col = rename_map.get(old_col, old_col)
-            new_entry_map[new_col] = entries
-        self.col_entry_map = new_entry_map
-
         # UI 갱신: Entry 비활성화 (재빌드하지 않음)
         new_rename_entries = {}
         for old_col, entry in self.col_rename_entries.items():
@@ -1525,12 +1461,6 @@ class SynthesizeApp:
             new_col = rename_map.get(old_col, old_col)
             new_col_types[new_col] = ctype
         self.col_types = new_col_types
-        # [Issue 5] col_entry_map 키도 동기화
-        new_entry_map = {}
-        for old_col, entries in self.col_entry_map.items():
-            new_col = rename_map.get(old_col, old_col)
-            new_entry_map[new_col] = entries
-        self.col_entry_map = new_entry_map
 
     # ── 컬럼명 자동 채우기 ──────────────────────────────
 
@@ -1548,133 +1478,66 @@ class SynthesizeApp:
             entry.delete(0, tk.END)
             entry.insert(0, new_name)
 
-    # ── 1:1 입력 위젯 동적 생성 ──────────────────────────
+    # ── 매핑 자동 생성 ────────────────────────────────────
 
-    def _build_input_widgets(self):
-        for w in self.input_inner.winfo_children():
-            w.destroy()
-        self.col_entry_map = {}
+    def _get_renamed_col(self, col: str) -> str:
+        """컬럼명 변경 Entry에 입력된 새 이름을 반환. 비어있으면 원본 컬럼명 반환.
 
-        str_cols = [c for c in self.df.columns
-                    if (self.df[c].dtype == object or pd.api.types.is_string_dtype(self.df[c]))
-                    and self.col_types.get(c) == 'categorical']
+        Args:
+            col (str): 원본 컬럼명
 
-        if not str_cols:
-            ttk.Label(self.input_inner, text="  입력이 필요한 문자열 컬럼이 없습니다.",
-                      style="Sub.TLabel").pack(anchor='w', pady=10)
-            return
-
-        for col_idx, col in enumerate(str_cols):
-            series = self.df[col].dropna()
-            is_id  = _is_id_col(series)
-            unique_vals = sorted([str(v) for v in series.unique() if v is not None])
-            n = len(unique_vals)
-
-            col_frame = ttk.Frame(self.input_inner)
-            col_frame.pack(fill=tk.X, pady=(8 if col_idx > 0 else 0, 2))
-
-            ttk.Label(col_frame,
-                      text=f"📋 {col}  ({n}개)",
-                      style="ColHeader.TLabel").pack(side=tk.LEFT)
-
-            if is_id:
-                ttk.Label(col_frame, text="  (ID형 — 자동 재생성)",
-                          style="Sub.TLabel").pack(side=tk.LEFT, padx=(8, 0))
-            else:
-                def _auto_col(c=col):
-                    self._auto_fill_column(c)
-                ttk.Button(col_frame, text="🔄 자동 채우기",
-                           command=_auto_col, style="Auto.TButton").pack(side=tk.RIGHT)
-
-            ttk.Separator(self.input_inner, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=1)
-
-            entries = []
-
-            if is_id:
-                # 원본 접두사 감지 후 겹치지 않는 접두사 선택
-                orig_prefix = _extract_id_prefix(unique_vals)
-                fake_prefix = _pick_different_prefix(orig_prefix)
-                for i, val in enumerate(unique_vals):
-                    row = ttk.Frame(self.input_inner)
-                    row.pack(fill=tk.X, padx=(20, 0), pady=1)
-                    ttk.Label(row, text=f"{val}", width=25, anchor='w',
-                              font=("Consolas", 9)).pack(side=tk.LEFT)
-                    ttk.Label(row, text="→", width=3).pack(side=tk.LEFT)
-                    fake_val = fake_prefix + str(i + 1).zfill(4)
-                    lbl = ttk.Label(row, text=fake_val, font=("Consolas", 9), foreground="#2266aa")
-                    lbl.pack(side=tk.LEFT)
-                    entries.append((val, None, fake_val))
-            else:
-                for val in unique_vals:
-                    row = ttk.Frame(self.input_inner)
-                    row.pack(fill=tk.X, padx=(20, 0), pady=1)
-
-                    ttk.Label(row, text=f"{str(val)[:30]}", width=25, anchor='w',
-                              font=("Consolas", 9)).pack(side=tk.LEFT)
-                    ttk.Label(row, text="→", width=3).pack(side=tk.LEFT)
-
-                    entry = ttk.Entry(row, font=("Consolas", 9), width=30)
-                    entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-                    entries.append((val, entry, None))
-
-            self.col_entry_map[col] = entries
-
-    # ── 자동 채우기 ──────────────────────────────────────
-
-    def _get_renamed_col(self, col):
-        """컬럼명 변경 Entry에 입력된 새 이름을 반환. 비어있으면 원본 컬럼명 반환."""
+        Returns:
+            str: 변환된 컬럼명 또는 원본 컬럼명
+        """
         if col in self.col_rename_entries:
             new_name = self.col_rename_entries[col].get().strip()
             if new_name:
                 return new_name
         return col
 
-    def _auto_fill_column(self, col):
-        if col not in self.col_entry_map:
-            return
-        entries = self.col_entry_map[col]
-        n = len(entries)
-        # 변환된 컬럼명 기반으로 코드 생성
-        display_col = self._get_renamed_col(col)
-        seed = abs(hash(col)) % 9999
+    def _generate_auto_mappings(self) -> dict:
+        """UI 없이 가짜 데이터 매핑을 자동 생성한다.
 
-        series = self.df[col].dropna().astype(str)
-        if series.str.match(r'^[가-힣]{2,4}$').mean() > 0.7:
-            pool = generate_fake_persons(n, seed=seed)
-        elif str(col).lower() in ['client', '고객', '발주', '선주', 'company', '업체']:
-            pool = generate_fake_companies(n, seed=seed)
-        else:
-            pool = generate_auto_codes(display_col, n, seed=seed)
+        문자열(categorical) 컬럼의 고유값을 추출하고,
+        컬럼 특성에 따라 가짜 인명/회사명/코드를 자동 생성하여 매핑 딕셔너리를 반환한다.
 
-        for i, (val, entry, fixed) in enumerate(entries):
-            if entry is not None and not entry.get().strip():
-                entry.delete(0, tk.END)
-                entry.insert(0, pool[i] if i < len(pool) else f"{str(display_col)}_{i}")
+        Args:
+            None
 
-    def _auto_fill_all(self):
-        for col in self.col_entry_map:
-            self._auto_fill_column(col)
-        self.status_lbl.config(text="전체 자동 채우기 완료")
-
-    # ── 매핑 수집 ────────────────────────────────────────
-
-    def _collect_mappings(self):
+        Returns:
+            dict: {컬럼명: {원본값: 가짜값, ...}, ...} 형태의 매핑 딕셔너리
+        """
         mapping_dict = {}
-        for col, entries in self.col_entry_map.items():
-            mapping = {}
-            for val, entry, fixed in entries:
-                if fixed is not None:
-                    mapping[val] = fixed
-                elif entry is not None:
-                    fake = entry.get().strip()
-                    if not fake:
-                        idx = len(mapping)
-                        alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-                        display_col = self._get_renamed_col(col)
-                        fake = f"{str(display_col)}_{alpha[idx] if idx < 26 else str(idx)}"
-                    mapping[val] = fake
+        str_cols = [c for c in self.df.columns
+                    if (self.df[c].dtype == object or pd.api.types.is_string_dtype(self.df[c]))
+                    and self.col_types.get(c) == 'categorical']
+
+        for col in str_cols:
+            series = self.df[col].dropna()
+            is_id = _is_id_col(series)
+            unique_vals = sorted([str(v) for v in series.unique() if v is not None])
+            n = len(unique_vals)
+
+            if is_id:
+                orig_prefix = _extract_id_prefix(unique_vals)
+                fake_prefix = _pick_different_prefix(orig_prefix)
+                mapping = {val: f'{fake_prefix}{i+1:04d}' for i, val in enumerate(unique_vals)}
+            else:
+                display_col = self._get_renamed_col(col)
+                seed = abs(hash(col)) % 9999
+                series_str = series.astype(str)
+                if series_str.str.match(r'^[가-힣]{2,4}$').mean() > 0.7:
+                    pool = generate_fake_persons(n, seed=seed)
+                elif str(col).lower() in ['client', '고객', '발주', '선주', 'company', '업체']:
+                    pool = generate_fake_companies(n, seed=seed)
+                else:
+                    pool = generate_auto_codes(display_col, n, seed=seed)
+                mapping = {val: pool[i] if i < len(pool) else f"{display_col}_{i}"
+                           for i, val in enumerate(unique_vals)}
+
             if mapping:
                 mapping_dict[col] = mapping
+
         return mapping_dict
 
     # ── 합성 실행 ────────────────────────────────────────
@@ -1754,7 +1617,7 @@ class SynthesizeApp:
 
         # 1. 매핑 수집
         P(0); S("[1/8] 매핑 수집..."); L("\n[1/8] 매핑 수집...")
-        mapping_dict = self._collect_mappings()
+        mapping_dict = self._generate_auto_mappings()
         for col, mp in mapping_dict.items():
             L(f"  📋 {col}: {len(mp)}개 매핑")
             sample = list(mp.items())[:2]
@@ -1981,11 +1844,11 @@ class SynthesizeApp:
         L(f"  🎉 완료!  {len(final)}행  |  품질 {ov:.1%}")
         L("=" * 55)
         S(f"완료 — {len(final)}행, 품질 {ov:.1%}")
-        self.root.after(0, lambda: self._set_step(5))  # → 완료 단계
+        self.root.after(0, lambda: self._set_step(4))  # → 완료 단계
 
         self.root.after(0, lambda: messagebox.showinfo("완료",
             f"합성 데이터 생성 완료!\n\n행 수: {len(final)}\n품질: {ov:.1%}\n\n"
-            f"저장:\n{out_xl}\n{out_key}"))
+            f"저장:\n{out_xl}"))
 
 
 if __name__ == "__main__":
